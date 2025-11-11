@@ -45,3 +45,7 @@ def rect_corners_from_p0p1(p0, p1, deg=0):
 
 def distance(p, q):
     return math.hypot(p[0]-q[0], p[1]-q[1])
+
+def angle_between(p0, p1):
+    """Angle in degrees from p0 to p1 (canvas y grows downward)."""
+    return math.degrees(math.atan2(p1[1]-p0[1], p1[0]-p0[0]))

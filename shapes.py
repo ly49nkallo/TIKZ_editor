@@ -376,3 +376,79 @@ class Dot(CircleShape):
     def handles(self):
         cx, cy = self.center
         return [(cx, cy, "move")]
+    
+    
+class ArcShape(Shape):
+    """A circular arc defined by center, radius, start angle, end angle."""
+    def __init__(self, center, radius, start_angle, end_angle,
+                 color="black", width=2,
+                 fill_enabled=False, fill_color="gray", fill_opacity=1.0):
+        self.center = center
+        self.radius = radius
+        self.start_angle = start_angle
+        self.end_angle = end_angle
+        self.color = color
+        self.width = width
+        self.fill_enabled = fill_enabled
+        self.fill_color = fill_color
+        self.fill_opacity = fill_opacity
+        self._ids = []
+        
+    def draw(self, canvas):
+        for iid in self._ids:
+            canvas.delete(iid)
+        cx, cy = self.center
+        r = self.radius
+        # use TkInter canvas arc (bbox x0,y0,x1,y1, start=deg, extent=deg)
+        start = -self.start_angle  # Tkinter y-axis is inverted
+        extent = -(self.end_angle - self.start_angle)
+        assert isinstance(cx, int)
+        assert isinstance(cy, int)
+        assert isinstance(r, float), f"{type(r)}, {r}"
+        arc_id = canvas.create_arc(cx - r, cy - r, cx + r,
+                                      cy + r, start=start, extent=extent,
+                                      style='arc', outline=self.color, width=self.width)
+        self._ids = [arc_id]
+        return self._ids
+    
+    def to_tikz(self):
+        cx, cy, r = self.center[0], self.center[1], self.radius
+        sa, ea = self.start_angle, self.end_angle
+        opts = [f"draw={self.color}", f"line width={self.width}pt"]
+        return (rf"\draw[{', '.join(opts)}] "
+                f"({fmt(cx)},{fmt(cy)}) ++({fmt(sa)}:{fmt(r)}) arc [start angle={fmt(sa)}, "
+                f"end angle={fmt(ea)}, radius={fmt(r)}];")
+        
+    def handles(self):
+        cx, cy = self.center
+        start_rad = math.radians(self.start_angle)
+        end_rad = math.radians(self.end_angle)
+        sx = cx + self.radius * math.cos(start_rad)
+        sy = cy + self.radius * math.sin(start_rad)
+        ex = cx + self.radius * math.cos(end_rad)
+        ey = cy + self.radius * math.sin(end_rad)
+        return [(cx, cy, "move"), (sx, sy, "start"), (ex, ey, "end")]
+    
+    def move_by(self, dx, dy):
+        self.center = (self.center[0] + dx, self.center[1] + dy)
+    def rotate_by(self, ddeg):
+        self.start_angle = (self.start_angle + ddeg) % 360
+        self.end_angle = (self.end_angle + ddeg) % 360
+        
+    def rotate_to(self, deg):
+        # rotate so that start_angle becomes deg
+        delta = (deg - self.start_angle) % 360
+        self.start_angle = deg % 360
+        self.end_angle = (self.end_angle + delta) % 360
+    
+    def on_handle_drag(self, kind, x, y):
+        cx, cy = self.center
+        if kind == "move":
+            self.center = (x, y)
+        elif kind == "start":
+            angle = math.degrees(math.atan2(y - cy, x - cx)) % 360
+            self.start_angle = angle
+        elif kind == "end":
+            angle = math.degrees(math.atan2(y - cy, x - cx)) % 360
+            self.end_angle = angle
+    

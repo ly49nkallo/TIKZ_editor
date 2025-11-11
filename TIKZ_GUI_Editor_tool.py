@@ -105,6 +105,7 @@ class TikzDesigner(tk.Tk):
         mk("Circle", "circle").grid(sticky="w")
         mk("Text (node)", "text").grid(sticky="w")
         mk("Dot", "dot").grid(sticky="w")
+        mk("Arc", "arc").grid(sticky="w")
 
         ttk.Separator(side).grid(sticky="ew", pady=6)
 
@@ -305,7 +306,8 @@ class TikzDesigner(tk.Tk):
         # Friendly tool names
         names = {
             'cursor': 'Cursor', 'line': 'Line', 'arrow': 'Arrow', 'rect': 'Rectangle',
-            'ellipse': 'Ellipse', 'circle': 'Circle', 'quad': 'Quad', 'dot': 'Dot', 'text': 'Text'
+            'ellipse': 'Ellipse', 'circle': 'Circle', 'quad': 'Quad', 'dot': 'Dot', 'text': 'Text',
+            'arc': 'Arc',
         }
         label = f"Tool: {names.get(tool_name, tool_name.title())}"
 
@@ -485,6 +487,20 @@ class TikzDesigner(tk.Tk):
                 fill_opacity=1.0)
             self._add_shape(dot_node)
             self._reset_temp("Dot added.")
+        elif tool == "arc":
+            self._clicks.append((x, y))
+            if len(self._clicks) == 3:
+                p0, p1, p2 = self._clicks
+                # p0 = center, p1 = radius point, p2 = end point
+                center = p0
+                radius_point = p1
+                end_point = p2
+                sa, ea = angle_between(center, radius_point), angle_between(center, end_point)
+                self._add_shape(ArcShape(
+                    center, distance(p0, p1), start_angle=sa, end_angle=ea,
+                    color=self.color.get(), width=self.width.get(),
+                ))
+                self._reset_temp("Arc added.")
 
     def on_motion(self, event):
         x, y = snap(event.x, event.y, self.snap_enabled.get(), self.grid_step.get())
@@ -545,6 +561,29 @@ class TikzDesigner(tk.Tk):
             size = self.text_size.get()
             self._temp_item = self.canvas.create_text(x, y, text=txt, fill=self.color.get(), font=("TkDefaultFont", size))
             self.status.set(f"Text preview: '{txt}' at ({x},{y})")
+        elif tool == "dot":
+            r = self.width.get()
+            self._temp_item = self.canvas.create_oval(x - r, y - r, x + r, y + r,
+                                                      outline="#888", fill="#888")
+            self.status.set(f"Dot preview at ({x},{y})")
+        elif tool == "arc" and len(self._clicks) >= 1:
+            if len(self._clicks) == 1:
+                center = self._clicks[0]
+                radius = distance(center, (x, y))
+                self._helper_items.append(self.canvas.create_line(center[0], center[1], x, y, fill="#bbb", dash=(2,2)))
+                self.status.set(f"Arc preview: center={center}, radius≈{radius:.2f}. Now move to set end point.")
+            elif len(self._clicks) == 2:
+                center = self._clicks[0]
+                radius_point = self._clicks[1]
+                radius = distance(center, radius_point)
+                sa = angle_between(center, radius_point)
+                ea = angle_between(center, (x, y))
+                self._temp_item = self.canvas.create_arc(
+                    center[0]-radius, center[1]-radius,
+                    center[0]+radius, center[1]+radius,
+                    start= -sa, extent= -(ea - sa),
+                    style='arc', outline="#888", dash=(4,2), width=1)
+                self.status.set(f"Arc preview: start_angle={sa:.1f}°, end_angle≈{ea:.1f}°. Click to finish.")
 
     def on_drag(self, event):
         if self.tool.get() != "cursor" or not self.selected:
@@ -643,6 +682,8 @@ class TikzDesigner(tk.Tk):
         if isinstance(shape, QuadBezier):
             return ((shape.p0[0]+shape.p1[0]+shape.c[0])/3,
                     (shape.p0[1]+shape.p1[1]+shape.c[1])/3)
+        if isinstance(shape, ArcShape):
+            return ((shape.p0[0]+shape.p1[0])/2, (shape.p0[1]+shape.p1[1])/2)
         return (0, 0)
 
     def _on_delete_key(self, event=None):
